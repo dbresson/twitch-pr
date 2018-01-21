@@ -30,21 +30,36 @@ Dir.mktmpdir do |dir|
 
   begin
     Dir.chdir dir
-    if !system("git clone #{pr.repo.ssh_url}")
+    if !system("git clone #{pr.base.repo.ssh_url}")
       STDERR.puts "Failed cloning the repo"
       exit 4
     end
 
-    Dir.chdir pr.repo.name
-    if !system("git checkout #{pr.merge_commit_sha}")
-      STDERR.puts "Failed to checkout merge commit"
+    Dir.chdir pr.base.repo.name
+    if !system("git checkout #{pr.base.sha}")
+      STDERR.puts "Failed to checkout base"
       exit 5
+    end
+
+    if !system("git remote add pr #{pr.head.repo.ssh_url}")
+      STDERR.puts "Failed to add pr repo as origin"
+      exit 6
+    end
+
+    if !system("git fetch pr")
+      STDERR.puts "Failed to fetch from the PR repo"
+      exit 7
+    end
+
+    if !system("git merge --ff-only #{pr.head.sha}")
+      STDERR.puts "Failed to merge commit"
+      exit 8
     end
 
     %w{lint test build}.each do |cmd|
       result = system("make #{cmd}")
       result_message = "#{cmd} status: #{ result ? 'SUCCESS' : 'FAILED'}"
-      client.issues.comments.create user: USER, repo: REPO, number: pr.id, body: result_msg
+      client.issues.comments.create user: USER, repo: REPO, number: ARGV[0], body: result_message
     end
 
   ensure
